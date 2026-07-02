@@ -167,7 +167,3 @@ This fork builds on the upstream [chongdashu/unreal-mcp](https://github.com/chon
 
 ## License
 MIT
-
-## Questions
-
-For questions, you can reach me on X/Twitter: [@chongdashu](https://www.x.com/chongdashu)
