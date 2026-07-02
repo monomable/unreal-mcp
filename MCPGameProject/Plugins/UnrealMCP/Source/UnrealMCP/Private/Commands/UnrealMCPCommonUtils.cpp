@@ -10,6 +10,8 @@
 #include "K2Node_VariableSet.h"
 #include "K2Node_InputAction.h"
 #include "K2Node_Self.h"
+#include "K2Node_IfThenElse.h"
+#include "K2Node_ExecutionSequence.h"
 #include "EdGraphSchema_K2.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Components/StaticMeshComponent.h"
@@ -413,7 +415,50 @@ UK2Node_Self* FUnrealMCPCommonUtils::CreateSelfReferenceNode(UEdGraph* Graph, co
     return SelfNode;
 }
 
-bool FUnrealMCPCommonUtils::ConnectGraphNodes(UEdGraph* Graph, UEdGraphNode* SourceNode, const FString& SourcePinName, 
+UK2Node_IfThenElse* FUnrealMCPCommonUtils::CreateBranchNode(UEdGraph* Graph, const FVector2D& Position)
+{
+    if (!Graph)
+    {
+        return nullptr;
+    }
+
+    UK2Node_IfThenElse* BranchNode = NewObject<UK2Node_IfThenElse>(Graph);
+    BranchNode->NodePosX = Position.X;
+    BranchNode->NodePosY = Position.Y;
+    Graph->AddNode(BranchNode, true);
+    BranchNode->CreateNewGuid();
+    BranchNode->PostPlacedNewNode();
+    BranchNode->AllocateDefaultPins();
+
+    return BranchNode;
+}
+
+UK2Node_ExecutionSequence* FUnrealMCPCommonUtils::CreateSequenceNode(UEdGraph* Graph, const FVector2D& Position, int32 NumOutputs)
+{
+    if (!Graph)
+    {
+        return nullptr;
+    }
+
+    UK2Node_ExecutionSequence* SequenceNode = NewObject<UK2Node_ExecutionSequence>(Graph);
+    SequenceNode->NodePosX = Position.X;
+    SequenceNode->NodePosY = Position.Y;
+    Graph->AddNode(SequenceNode, true);
+    SequenceNode->CreateNewGuid();
+    SequenceNode->PostPlacedNewNode();
+    SequenceNode->AllocateDefaultPins();
+
+    // AllocateDefaultPins already creates then_0 and then_1; add any extra pins requested.
+    const int32 ExtraPinsNeeded = FMath::Max(0, NumOutputs - 2);
+    for (int32 i = 0; i < ExtraPinsNeeded; ++i)
+    {
+        SequenceNode->AddInputPin();
+    }
+
+    return SequenceNode;
+}
+
+bool FUnrealMCPCommonUtils::ConnectGraphNodes(UEdGraph* Graph, UEdGraphNode* SourceNode, const FString& SourcePinName,
                                            UEdGraphNode* TargetNode, const FString& TargetPinName)
 {
     if (!Graph || !SourceNode || !TargetNode)

@@ -15,6 +15,8 @@ class UK2Node_VariableGet;
 class UK2Node_VariableSet;
 class UK2Node_InputAction;
 class UK2Node_Self;
+class UK2Node_IfThenElse;
+class UK2Node_ExecutionSequence;
 class UFunction;
 
 /**
@@ -54,6 +56,10 @@ public:
     static UK2Node_VariableSet* CreateVariableSetNode(UEdGraph* Graph, UBlueprint* Blueprint, const FString& VariableName, const FVector2D& Position, UClass* OwnerClass = nullptr);
     static UK2Node_InputAction* CreateInputActionNode(UEdGraph* Graph, const FString& ActionName, const FVector2D& Position);
     static UK2Node_Self* CreateSelfReferenceNode(UEdGraph* Graph, const FVector2D& Position);
+    // Branch (if/then/else) node.
+    static UK2Node_IfThenElse* CreateBranchNode(UEdGraph* Graph, const FVector2D& Position);
+    // Sequence node. NumOutputs must be >= 2; extra "then_N" pins are appended beyond the default 2.
+    static UK2Node_ExecutionSequence* CreateSequenceNode(UEdGraph* Graph, const FVector2D& Position, int32 NumOutputs = 2);
     static bool ConnectGraphNodes(UEdGraph* Graph, UEdGraphNode* SourceNode, const FString& SourcePinName, 
                                 UEdGraphNode* TargetNode, const FString& TargetPinName);
     static UEdGraphPin* FindPin(UEdGraphNode* Node, const FString& PinName, EEdGraphPinDirection Direction = EGPD_MAX);

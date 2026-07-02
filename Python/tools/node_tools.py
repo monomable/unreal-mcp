@@ -397,6 +397,117 @@ def register_blueprint_node_tools(mcp: FastMCP):
             return {"success": False, "message": error_msg}
     
     @mcp.tool()
+    def add_blueprint_branch_node(
+        ctx: Context,
+        blueprint_name: str,
+        node_position = None,
+        graph_name: str = None
+    ) -> Dict[str, Any]:
+        """
+        Add a Branch (if/then/else) node to a Blueprint's graph.
+
+        Wire a bool into the "Condition" pin, and exec into "execute". Output exec pins
+        are "then" (condition true) and "else" (condition false).
+
+        Args:
+            blueprint_name: Name of the target Blueprint
+            node_position: Optional [X, Y] position in the graph
+            graph_name: Optional name of a custom function graph to target (e.g. "Enable").
+                        Defaults to the main EventGraph if omitted.
+
+        Returns:
+            Response containing the node ID and success status
+        """
+        from unreal_mcp_server import get_unreal_connection
+
+        try:
+            if node_position is None:
+                node_position = [0, 0]
+
+            params = {
+                "blueprint_name": blueprint_name,
+                "node_position": node_position,
+                "graph_name": graph_name
+            }
+
+            unreal = get_unreal_connection()
+            if not unreal:
+                logger.error("Failed to connect to Unreal Engine")
+                return {"success": False, "message": "Failed to connect to Unreal Engine"}
+
+            logger.info(f"Adding branch node to blueprint '{blueprint_name}'")
+            response = unreal.send_command("add_blueprint_branch_node", params)
+
+            if not response:
+                logger.error("No response from Unreal Engine")
+                return {"success": False, "message": "No response from Unreal Engine"}
+
+            logger.info(f"Branch node creation response: {response}")
+            return response
+
+        except Exception as e:
+            error_msg = f"Error adding branch node: {e}"
+            logger.error(error_msg)
+            return {"success": False, "message": error_msg}
+
+    @mcp.tool()
+    def add_blueprint_sequence_node(
+        ctx: Context,
+        blueprint_name: str,
+        node_position = None,
+        graph_name: str = None,
+        num_outputs: int = 2
+    ) -> Dict[str, Any]:
+        """
+        Add a Sequence node to a Blueprint's graph.
+
+        Wire exec into "execute". Output exec pins are "then_0", "then_1", ... up to
+        num_outputs - 1, each firing in order on the same call.
+
+        Args:
+            blueprint_name: Name of the target Blueprint
+            node_position: Optional [X, Y] position in the graph
+            graph_name: Optional name of a custom function graph to target (e.g. "Enable").
+                        Defaults to the main EventGraph if omitted.
+            num_outputs: Number of "then_N" output exec pins (minimum 2, default 2)
+
+        Returns:
+            Response containing the node ID and success status
+        """
+        from unreal_mcp_server import get_unreal_connection
+
+        try:
+            if node_position is None:
+                node_position = [0, 0]
+
+            params = {
+                "blueprint_name": blueprint_name,
+                "node_position": node_position,
+                "graph_name": graph_name,
+                "num_outputs": max(2, num_outputs)
+            }
+
+            unreal = get_unreal_connection()
+            if not unreal:
+                logger.error("Failed to connect to Unreal Engine")
+                return {"success": False, "message": "Failed to connect to Unreal Engine"}
+
+            logger.info(f"Adding sequence node to blueprint '{blueprint_name}'")
+            response = unreal.send_command("add_blueprint_sequence_node", params)
+
+            if not response:
+                logger.error("No response from Unreal Engine")
+                return {"success": False, "message": "No response from Unreal Engine"}
+
+            logger.info(f"Sequence node creation response: {response}")
+            return response
+
+        except Exception as e:
+            error_msg = f"Error adding sequence node: {e}"
+            logger.error(error_msg)
+            return {"success": False, "message": error_msg}
+
+    @mcp.tool()
     def find_blueprint_nodes(
         ctx: Context,
         blueprint_name: str,

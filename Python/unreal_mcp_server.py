@@ -336,6 +336,8 @@ def info():
     - `add_blueprint_variable(blueprint_name, variable_name, variable_type)` - Add variables
     - `add_blueprint_get_self_component_reference(blueprint_name, component_name)` - Add component refs
     - `add_blueprint_self_reference(blueprint_name)` - Add self references
+    - `add_blueprint_branch_node(blueprint_name)` - Add a Branch (if/then/else) node
+    - `add_blueprint_sequence_node(blueprint_name, num_outputs=2)` - Add a Sequence node
     - `find_blueprint_nodes(blueprint_name, node_type, event_type)` - Find nodes
     
     ## Project Tools

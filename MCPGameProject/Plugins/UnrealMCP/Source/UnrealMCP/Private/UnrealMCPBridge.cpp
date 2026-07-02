@@ -264,7 +264,9 @@ FString UUnrealMCPBridge::ExecuteCommand(const FString& CommandType, const TShar
                      CommandType == TEXT("add_blueprint_variable_get_node") ||
                      CommandType == TEXT("add_blueprint_variable_set_node") ||
                      CommandType == TEXT("break_blueprint_pin_links") ||
-                     CommandType == TEXT("delete_blueprint_node"))
+                     CommandType == TEXT("delete_blueprint_node") ||
+                     CommandType == TEXT("add_blueprint_branch_node") ||
+                     CommandType == TEXT("add_blueprint_sequence_node"))
             {
                 ResultJson = BlueprintNodeCommands->HandleCommand(CommandType, Params);
             }
