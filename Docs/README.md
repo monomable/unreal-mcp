@@ -5,5 +5,6 @@ Welcome to the documentation for the Unreal Engine Model Context Protocol (MCP) 
 ## Contents
 
 - [Tools](Tools/README.md) - All the tools that are available.
-- [한국어 설치 및 사용 가이드](README.ko.md) - Korean installation & usage guide.
+- [Installation & Usage Guide (English)](README.en.md)
+- [설치 및 사용 가이드 (한국어)](README.ko.md)
 
