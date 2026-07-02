@@ -89,14 +89,34 @@ uint32 FMCPServerRunnable::Run()
                                 // Log response for debugging
                                 UE_LOG(LogTemp, Display, TEXT("MCPServerRunnable: Sending response: %s"), *Response);
                                 
-                                // Send response
-                                int32 BytesSent = 0;
-                                if (!ClientSocket->Send((uint8*)TCHAR_TO_UTF8(*Response), Response.Len(), BytesSent))
+                                // Send response. Send() may only accept part of the buffer in one call
+                                // (e.g. for large payloads like a full function-graph node dump), so loop
+                                // until everything is sent instead of silently truncating.
+                                FTCHARToUTF8 ResponseUtf8(*Response);
+                                const uint8* ResponseBytes = (const uint8*)ResponseUtf8.Get();
+                                const int32 ResponseByteLen = ResponseUtf8.Length();
+                                int32 TotalSent = 0;
+                                bool bSendFailed = false;
+                                while (TotalSent < ResponseByteLen)
                                 {
-                                    UE_LOG(LogTemp, Warning, TEXT("MCPServerRunnable: Failed to send response"));
+                                    int32 BytesSent = 0;
+                                    if (!ClientSocket->Send(ResponseBytes + TotalSent, ResponseByteLen - TotalSent, BytesSent))
+                                    {
+                                        UE_LOG(LogTemp, Warning, TEXT("MCPServerRunnable: Failed to send response"));
+                                        bSendFailed = true;
+                                        break;
+                                    }
+                                    if (BytesSent <= 0)
+                                    {
+                                        UE_LOG(LogTemp, Warning, TEXT("MCPServerRunnable: Send made no progress, aborting"));
+                                        bSendFailed = true;
+                                        break;
+                                    }
+                                    TotalSent += BytesSent;
                                 }
-                                else {
-                                    UE_LOG(LogTemp, Display, TEXT("MCPServerRunnable: Response sent successfully, bytes: %d"), BytesSent);
+                                if (!bSendFailed)
+                                {
+                                    UE_LOG(LogTemp, Display, TEXT("MCPServerRunnable: Response sent successfully, bytes: %d"), TotalSent);
                                 }
                             }
                             else

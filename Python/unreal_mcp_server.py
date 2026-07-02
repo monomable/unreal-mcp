@@ -48,7 +48,7 @@ class UnrealConnection:
             
             logger.info(f"Connecting to Unreal at {UNREAL_HOST}:{UNREAL_PORT}...")
             self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.socket.settimeout(5)  # 5 second timeout
+            self.socket.settimeout(30)  # 30 second timeout to allow large graph dumps to complete
             
             # Set socket options for better stability
             self.socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
@@ -78,10 +78,10 @@ class UnrealConnection:
         self.socket = None
         self.connected = False
 
-    def receive_full_response(self, sock, buffer_size=4096) -> bytes:
+    def receive_full_response(self, sock, buffer_size=65536) -> bytes:
         """Receive a complete response from Unreal, handling chunked data."""
         chunks = []
-        sock.settimeout(5)  # 5 second timeout
+        sock.settimeout(30)  # 30 second timeout to allow large graph dumps to complete
         try:
             while True:
                 chunk = sock.recv(buffer_size)
@@ -90,16 +90,22 @@ class UnrealConnection:
                         raise Exception("Connection closed before receiving data")
                     break
                 chunks.append(chunk)
-                
+
                 # Process the data received so far
                 data = b''.join(chunks)
-                decoded_data = data.decode('utf-8')
-                
-                # Try to parse as JSON to check if complete
+
+                # Try to decode + parse as JSON to check if complete. A chunk boundary can land
+                # in the middle of a multi-byte UTF-8 character (e.g. Korean node/variable names),
+                # which raises UnicodeDecodeError even though the message just isn't complete yet -
+                # that must be treated the same as "keep reading", not as a fatal error.
                 try:
+                    decoded_data = data.decode('utf-8')
                     json.loads(decoded_data)
                     logger.info(f"Received complete response ({len(data)} bytes)")
                     return data
+                except UnicodeDecodeError:
+                    logger.debug(f"Received partial multi-byte UTF-8 sequence, waiting for more data...")
+                    continue
                 except json.JSONDecodeError:
                     # Not complete JSON yet, continue reading
                     logger.debug(f"Received partial response, waiting for more data...")

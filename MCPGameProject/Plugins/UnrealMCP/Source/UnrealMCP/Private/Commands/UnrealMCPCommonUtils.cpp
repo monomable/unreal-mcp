@@ -18,6 +18,7 @@
 #include "Components/SceneComponent.h"
 #include "UObject/UObjectIterator.h"
 #include "Engine/Selection.h"
+#include "AssetRegistry/AssetRegistryModule.h"
 #include "EditorAssetLibrary.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "Engine/BlueprintGeneratedClass.h"
@@ -153,8 +154,41 @@ UBlueprint* FUnrealMCPCommonUtils::FindBlueprint(const FString& BlueprintName)
 
 UBlueprint* FUnrealMCPCommonUtils::FindBlueprintByName(const FString& BlueprintName)
 {
-    FString AssetPath = TEXT("/Game/Blueprints/") + BlueprintName;
-    return LoadObject<UBlueprint>(nullptr, *AssetPath);
+    // If a full/partial content path was passed in (e.g. "/Game/Dev/Assets/.../AC_Flight"),
+    // use it as-is instead of blindly prefixing "/Game/Blueprints/", which previously produced
+    // malformed double-slash package names (fatal error) for any already-rooted path.
+    if (BlueprintName.StartsWith(TEXT("/Game/")))
+    {
+        if (UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintName))
+        {
+            return Blueprint;
+        }
+    }
+    else
+    {
+        FString AssetPath = TEXT("/Game/Blueprints/") + BlueprintName;
+        if (UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *AssetPath))
+        {
+            return Blueprint;
+        }
+    }
+
+    // Fallback: search the asset registry for a Blueprint asset with this exact name anywhere
+    // in the project, so callers don't need to know the exact folder.
+    FAssetRegistryModule& AssetRegistryModule = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry"));
+    TArray<FAssetData> AssetData;
+    AssetRegistryModule.Get().GetAssetsByClass(UBlueprint::StaticClass()->GetClassPathName(), AssetData);
+
+    const FString TargetName = FPaths::GetBaseFilename(BlueprintName);
+    for (const FAssetData& Asset : AssetData)
+    {
+        if (Asset.AssetName.ToString().Equals(TargetName, ESearchCase::IgnoreCase))
+        {
+            return Cast<UBlueprint>(Asset.GetAsset());
+        }
+    }
+
+    return nullptr;
 }
 
 UEdGraph* FUnrealMCPCommonUtils::FindOrCreateEventGraph(UBlueprint* Blueprint)
@@ -177,6 +211,37 @@ UEdGraph* FUnrealMCPCommonUtils::FindOrCreateEventGraph(UBlueprint* Blueprint)
     UEdGraph* NewGraph = FBlueprintEditorUtils::CreateNewGraph(Blueprint, FName(TEXT("EventGraph")), UEdGraph::StaticClass(), UEdGraphSchema_K2::StaticClass());
     FBlueprintEditorUtils::AddUbergraphPage(Blueprint, NewGraph);
     return NewGraph;
+}
+
+UEdGraph* FUnrealMCPCommonUtils::FindGraph(UBlueprint* Blueprint, const FString& GraphName)
+{
+    if (!Blueprint)
+    {
+        return nullptr;
+    }
+
+    if (GraphName.IsEmpty() || GraphName.Equals(TEXT("EventGraph"), ESearchCase::IgnoreCase))
+    {
+        return FindOrCreateEventGraph(Blueprint);
+    }
+
+    for (UEdGraph* Graph : Blueprint->FunctionGraphs)
+    {
+        if (Graph->GetName().Equals(GraphName, ESearchCase::IgnoreCase))
+        {
+            return Graph;
+        }
+    }
+
+    for (UEdGraph* Graph : Blueprint->UbergraphPages)
+    {
+        if (Graph->GetName().Equals(GraphName, ESearchCase::IgnoreCase))
+        {
+            return Graph;
+        }
+    }
+
+    return nullptr;
 }
 
 // Blueprint node utilities
@@ -251,57 +316,63 @@ UK2Node_CallFunction* FUnrealMCPCommonUtils::CreateFunctionCallNode(UEdGraph* Gr
     return FunctionNode;
 }
 
-UK2Node_VariableGet* FUnrealMCPCommonUtils::CreateVariableGetNode(UEdGraph* Graph, UBlueprint* Blueprint, const FString& VariableName, const FVector2D& Position)
+UK2Node_VariableGet* FUnrealMCPCommonUtils::CreateVariableGetNode(UEdGraph* Graph, UBlueprint* Blueprint, const FString& VariableName, const FVector2D& Position, UClass* OwnerClass)
 {
     if (!Graph || !Blueprint)
     {
         return nullptr;
     }
-    
+
     UK2Node_VariableGet* VariableGetNode = NewObject<UK2Node_VariableGet>(Graph);
-    
+
     FName VarName(*VariableName);
-    FProperty* Property = FindFProperty<FProperty>(Blueprint->GeneratedClass, VarName);
-    
+    UClass* SearchClass = OwnerClass ? OwnerClass : Blueprint->GeneratedClass.Get();
+    FProperty* Property = FindFProperty<FProperty>(SearchClass, VarName);
+
     if (Property)
     {
-        VariableGetNode->VariableReference.SetFromField<FProperty>(Property, false);
+        const bool bSelfContext = (SearchClass == Blueprint->GeneratedClass);
+        VariableGetNode->VariableReference.SetFromField<FProperty>(Property, bSelfContext);
         VariableGetNode->NodePosX = Position.X;
         VariableGetNode->NodePosY = Position.Y;
         Graph->AddNode(VariableGetNode, true);
+        VariableGetNode->CreateNewGuid();
         VariableGetNode->PostPlacedNewNode();
         VariableGetNode->AllocateDefaultPins();
-        
+
         return VariableGetNode;
     }
-    
+
     return nullptr;
 }
 
-UK2Node_VariableSet* FUnrealMCPCommonUtils::CreateVariableSetNode(UEdGraph* Graph, UBlueprint* Blueprint, const FString& VariableName, const FVector2D& Position)
+UK2Node_VariableSet* FUnrealMCPCommonUtils::CreateVariableSetNode(UEdGraph* Graph, UBlueprint* Blueprint, const FString& VariableName, const FVector2D& Position, UClass* OwnerClass)
 {
     if (!Graph || !Blueprint)
     {
         return nullptr;
     }
-    
+
     UK2Node_VariableSet* VariableSetNode = NewObject<UK2Node_VariableSet>(Graph);
-    
+
     FName VarName(*VariableName);
-    FProperty* Property = FindFProperty<FProperty>(Blueprint->GeneratedClass, VarName);
-    
+    UClass* SearchClass = OwnerClass ? OwnerClass : Blueprint->GeneratedClass.Get();
+    FProperty* Property = FindFProperty<FProperty>(SearchClass, VarName);
+
     if (Property)
     {
-        VariableSetNode->VariableReference.SetFromField<FProperty>(Property, false);
+        const bool bSelfContext = (SearchClass == Blueprint->GeneratedClass);
+        VariableSetNode->VariableReference.SetFromField<FProperty>(Property, bSelfContext);
         VariableSetNode->NodePosX = Position.X;
         VariableSetNode->NodePosY = Position.Y;
         Graph->AddNode(VariableSetNode, true);
+        VariableSetNode->CreateNewGuid();
         VariableSetNode->PostPlacedNewNode();
         VariableSetNode->AllocateDefaultPins();
-        
+
         return VariableSetNode;
     }
-    
+
     return nullptr;
 }
 

@@ -12,6 +12,8 @@
 
 This project enables AI assistant clients like Cursor, Windsurf and Claude Desktop to control Unreal Engine through natural language using the Model Context Protocol (MCP).
 
+> **This is a fork of [chongdashu/unreal-mcp](https://github.com/chongdashu/unreal-mcp)** with additional Blueprint graph editing features. See [Modifications in this Fork](#-modifications-in-this-fork) below for what's changed. Tested only on **Unreal Engine 5.5.4** — see [Releases](../../releases).
+
 ## ⚠️ Experimental Status
 
 This project is currently in an **EXPERIMENTAL** state. The API, functionality, and implementation details are subject to significant changes. While we encourage testing and feedback, please be aware that:
@@ -70,7 +72,7 @@ All these capabilities are accessible through natural language commands via AI a
 ## 🚀 Quick Start Guide
 
 ### Prerequisites
-- Unreal Engine 5.5+
+- Unreal Engine 5.5+ (this fork tested only on 5.5.4)
 - Python 3.12+
 - MCP Client (e.g., Claude Desktop, Cursor, Windsurf)
 
@@ -146,6 +148,22 @@ Depending on which MCP client you're using, the configuration file location will
 Each client uses the same JSON format as shown in the example above. 
 Simply place the configuration in the appropriate location for your MCP client.
 
+
+## 🔧 Modifications in this Fork
+
+This fork builds on the upstream [chongdashu/unreal-mcp](https://github.com/chongdashu/unreal-mcp) project. Changes are focused on making Blueprint graph editing work beyond just the main EventGraph, plus a couple of reliability fixes.
+
+**C++ Plugin (`MCPGameProject/Plugins/UnrealMCP`)**
+- **Target any Blueprint graph, not just EventGraph** — added `FUnrealMCPCommonUtils::FindGraph()` so node/connection commands can target a named function graph (e.g. a custom function called `Enable`) instead of only the main event graph.
+- **New commands**: `list_blueprint_graphs`, `add_blueprint_variable_get_node`, `add_blueprint_variable_set_node`, `break_blueprint_pin_links`, `delete_blueprint_node`.
+- **Cross-component variable references** — `CreateVariableGetNode` / `CreateVariableSetNode` accept an optional `OwnerClass`, so a generated Get/Set node can reference a variable owned by another class (e.g. a sibling component) instead of only `self`.
+- **Fixed a TCP response truncation bug** in `MCPServerRunnable.cpp` — `FSocket::Send()` isn't guaranteed to send the whole buffer in one call, so large responses (e.g. a full node-graph dump) could get silently cut off. Sending now loops until all bytes are confirmed sent.
+
+**Python MCP Server (`Python/`)**
+- Added an optional `graph_name` parameter to the relevant blueprint node tools (`add_blueprint_function_node`, `connect_blueprint_nodes`, `add_blueprint_get_component_node`, `add_blueprint_self_reference`, etc.) so callers can target a specific function graph. Defaults to the main EventGraph when omitted, preserving existing behavior.
+
+**Compatibility**
+- Only verified against **Unreal Engine 5.5.4**. Other 5.5.x builds are likely fine but untested — see [Releases](../../releases) for the tested tag.
 
 ## License
 MIT
