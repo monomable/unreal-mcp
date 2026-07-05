@@ -1,6 +1,8 @@
 #include "Commands/UnrealMCPCommonUtils.h"
 #include "GameFramework/Actor.h"
 #include "Engine/Blueprint.h"
+#include "Engine/EngineTypes.h"
+#include "UObject/UnrealType.h"
 #include "EdGraph/EdGraph.h"
 #include "EdGraph/EdGraphNode.h"
 #include "EdGraph/EdGraphPin.h"
@@ -12,6 +14,7 @@
 #include "K2Node_Self.h"
 #include "K2Node_IfThenElse.h"
 #include "K2Node_ExecutionSequence.h"
+#include "K2Node_Composite.h"
 #include "EdGraphSchema_K2.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Components/StaticMeshComponent.h"
@@ -215,6 +218,25 @@ UEdGraph* FUnrealMCPCommonUtils::FindOrCreateEventGraph(UBlueprint* Blueprint)
     return NewGraph;
 }
 
+void FUnrealMCPCommonUtils::GatherNestedGraphs(UEdGraph* Graph, TArray<UEdGraph*>& OutNestedGraphs)
+{
+    if (!Graph)
+    {
+        return;
+    }
+
+    for (UEdGraphNode* Node : Graph->Nodes)
+    {
+        UK2Node_Composite* CompositeNode = Cast<UK2Node_Composite>(Node);
+        if (CompositeNode && CompositeNode->BoundGraph && !OutNestedGraphs.Contains(CompositeNode->BoundGraph))
+        {
+            OutNestedGraphs.Add(CompositeNode->BoundGraph);
+            // Composites can be collapsed inside other composites - recurse to find those too.
+            GatherNestedGraphs(CompositeNode->BoundGraph, OutNestedGraphs);
+        }
+    }
+}
+
 UEdGraph* FUnrealMCPCommonUtils::FindGraph(UBlueprint* Blueprint, const FString& GraphName)
 {
     if (!Blueprint)
@@ -240,6 +262,27 @@ UEdGraph* FUnrealMCPCommonUtils::FindGraph(UBlueprint* Blueprint, const FString&
         if (Graph->GetName().Equals(GraphName, ESearchCase::IgnoreCase))
         {
             return Graph;
+        }
+    }
+
+    // Not found at the top level - GraphName may refer to a collapsed/composite ("folded")
+    // sub-graph nested inside an event graph or function graph. Walk every top-level graph's
+    // composite nodes recursively (composites can contain further composites) and match by name.
+    TArray<UEdGraph*> NestedGraphs;
+    for (UEdGraph* Graph : Blueprint->UbergraphPages)
+    {
+        GatherNestedGraphs(Graph, NestedGraphs);
+    }
+    for (UEdGraph* Graph : Blueprint->FunctionGraphs)
+    {
+        GatherNestedGraphs(Graph, NestedGraphs);
+    }
+
+    for (UEdGraph* Nested : NestedGraphs)
+    {
+        if (Nested && Nested->GetName().Equals(GraphName, ESearchCase::IgnoreCase))
+        {
+            return Nested;
         }
     }
 
@@ -818,8 +861,89 @@ bool FUnrealMCPCommonUtils::SetObjectProperty(UObject* Object, const FString& Pr
             }
         }
     }
-    
-    OutErrorMessage = FString::Printf(TEXT("Unsupported property type: %s for property %s"), 
+    else if (Property->IsA<FNameProperty>())
+    {
+        ((FNameProperty*)Property)->SetPropertyValue(PropertyAddr, FName(*Value->AsString()));
+        return true;
+    }
+    else if (Property->IsA<FStructProperty>())
+    {
+        FStructProperty* StructProperty = CastField<FStructProperty>(Property);
+        UScriptStruct* Struct = StructProperty->Struct;
+
+        // Accept either a JSON array [x,y,z,w] or an object {"r":..,"g":..,"b":..,"a":..}/{"x":..,"y":..,"z":..}
+        auto GetComponent = [&Value](int32 Index, const TCHAR* ObjectKeyA, const TCHAR* ObjectKeyB, double Default) -> double
+        {
+            const TArray<TSharedPtr<FJsonValue>>* Arr = nullptr;
+            if (Value->TryGetArray(Arr) && Arr->IsValidIndex(Index))
+            {
+                return (*Arr)[Index]->AsNumber();
+            }
+            const TSharedPtr<FJsonObject>* Obj = nullptr;
+            if (Value->TryGetObject(Obj))
+            {
+                double Out = Default;
+                if (ObjectKeyA && (*Obj)->TryGetNumberField(ObjectKeyA, Out)) return Out;
+                if (ObjectKeyB && (*Obj)->TryGetNumberField(ObjectKeyB, Out)) return Out;
+            }
+            return Default;
+        };
+
+        if (Struct == TBaseStructure<FLinearColor>::Get())
+        {
+            FLinearColor ColorValue(
+                GetComponent(0, TEXT("r"), TEXT("R"), 0.0),
+                GetComponent(1, TEXT("g"), TEXT("G"), 0.0),
+                GetComponent(2, TEXT("b"), TEXT("B"), 0.0),
+                GetComponent(3, TEXT("a"), TEXT("A"), 1.0));
+            StructProperty->CopySingleValue(PropertyAddr, &ColorValue);
+            return true;
+        }
+        else if (Struct == TBaseStructure<FVector2D>::Get())
+        {
+            FVector2D VecValue(
+                GetComponent(0, TEXT("x"), TEXT("X"), 0.0),
+                GetComponent(1, TEXT("y"), TEXT("Y"), 0.0));
+            StructProperty->CopySingleValue(PropertyAddr, &VecValue);
+            return true;
+        }
+        else if (Struct == TBaseStructure<FVector>::Get())
+        {
+            FVector VecValue(
+                GetComponent(0, TEXT("x"), TEXT("X"), 0.0),
+                GetComponent(1, TEXT("y"), TEXT("Y"), 0.0),
+                GetComponent(2, TEXT("z"), TEXT("Z"), 0.0));
+            StructProperty->CopySingleValue(PropertyAddr, &VecValue);
+            return true;
+        }
+
+        OutErrorMessage = FString::Printf(TEXT("Unsupported struct type: %s for property %s"),
+                                        *Struct->GetName(), *PropertyName);
+        return false;
+    }
+    else if (Property->IsA<FObjectProperty>() || Property->IsA<FSoftObjectProperty>())
+    {
+        FString AssetPath = Value->AsString();
+        UObject* Asset = UEditorAssetLibrary::LoadAsset(AssetPath);
+        if (!Asset)
+        {
+            OutErrorMessage = FString::Printf(TEXT("Could not load asset '%s' for property %s"), *AssetPath, *PropertyName);
+            return false;
+        }
+
+        if (FObjectProperty* ObjectProperty = CastField<FObjectProperty>(Property))
+        {
+            ObjectProperty->SetObjectPropertyValue(PropertyAddr, Asset);
+            return true;
+        }
+        if (FSoftObjectProperty* SoftObjectProperty = CastField<FSoftObjectProperty>(Property))
+        {
+            SoftObjectProperty->SetObjectPropertyValue(PropertyAddr, Asset);
+            return true;
+        }
+    }
+
+    OutErrorMessage = FString::Printf(TEXT("Unsupported property type: %s for property %s"),
                                     *Property->GetClass()->GetName(), *PropertyName);
     return false;
-} 
+}

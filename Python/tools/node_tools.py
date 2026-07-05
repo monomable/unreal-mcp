@@ -525,8 +525,11 @@ def register_blueprint_node_tools(mcp: FastMCP):
                        linked connections) - use this to inspect an existing custom function
                        (e.g. "Enable") before editing it.
             event_type: Optional specific event type to find (BeginPlay, Tick, etc.), required when node_type="Event"
-            graph_name: Optional name of a custom function graph to target (e.g. "Enable").
-                        Defaults to the main EventGraph if omitted.
+            graph_name: Optional name of a custom function graph, or a collapsed/composite
+                        ("folded") sub-graph nested inside any event/function graph, to target
+                        (e.g. "Enable", or the name of a folded node group from
+                        list_blueprint_graphs' "composite_graphs"). Defaults to the main
+                        EventGraph if omitted.
 
         Returns:
             Response containing array of found node IDs (or full node/pin dump for "All") and success status
@@ -567,15 +570,19 @@ def register_blueprint_node_tools(mcp: FastMCP):
         blueprint_name: str
     ) -> Dict[str, Any]:
         """
-        List the names of a Blueprint's event graphs and custom function graphs.
-        Use this to confirm the exact name of a custom function (e.g. "Enable") before
-        targeting it with graph_name in other node tools.
+        List the names of a Blueprint's event graphs, custom function graphs, and collapsed/
+        composite ("folded") sub-graphs nested inside them.
+        Use this to confirm the exact name of a custom function (e.g. "Enable") or a folded
+        node group before targeting it with graph_name in other node tools.
 
         Args:
             blueprint_name: Name of the target Blueprint
 
         Returns:
-            Response containing "event_graphs" and "function_graphs" name arrays
+            Response containing "event_graphs", "function_graphs", and "composite_graphs"
+            name arrays. Entries in "composite_graphs" are collapsed/folded node groups found
+            anywhere inside the event/function graphs (including nested inside other
+            composites) - pass their name as graph_name to inspect what's folded inside.
         """
         from unreal_mcp_server import get_unreal_connection
 

@@ -44,7 +44,12 @@ public:
     static UEdGraph* FindOrCreateEventGraph(UBlueprint* Blueprint);
     // Resolves a graph by name: empty/"EventGraph" returns the main event graph,
     // otherwise searches FunctionGraphs (e.g. a custom function like "Enable") and UbergraphPages.
+    // Falls back to a recursive search through collapsed/composite ("folded") sub-graphs nested
+    // inside any of those top-level graphs (see GatherNestedGraphs).
     static UEdGraph* FindGraph(UBlueprint* Blueprint, const FString& GraphName);
+    // Recursively collects every collapsed/composite sub-graph (K2Node_Composite::BoundGraph)
+    // reachable from Graph, including composites nested inside other composites.
+    static void GatherNestedGraphs(UEdGraph* Graph, TArray<UEdGraph*>& OutNestedGraphs);
 
     // Blueprint node utilities
     static UK2Node_Event* CreateEventNode(UEdGraph* Graph, const FString& EventName, const FVector2D& Position);

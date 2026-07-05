@@ -1185,9 +1185,32 @@ TSharedPtr<FJsonObject> FUnrealMCPBlueprintNodeCommands::HandleListBlueprintGrap
         }
     }
 
+    // Collapsed/composite ("folded") sub-graphs are nested inside event/function graphs and
+    // aren't otherwise discoverable. Surface their names too so callers know what to pass as
+    // graph_name to find_blueprint_nodes etc. instead of guessing.
+    TArray<UEdGraph*> NestedGraphs;
+    for (UEdGraph* Graph : Blueprint->UbergraphPages)
+    {
+        FUnrealMCPCommonUtils::GatherNestedGraphs(Graph, NestedGraphs);
+    }
+    for (UEdGraph* Graph : Blueprint->FunctionGraphs)
+    {
+        FUnrealMCPCommonUtils::GatherNestedGraphs(Graph, NestedGraphs);
+    }
+
+    TArray<TSharedPtr<FJsonValue>> CompositeGraphNames;
+    for (UEdGraph* Nested : NestedGraphs)
+    {
+        if (Nested)
+        {
+            CompositeGraphNames.Add(MakeShared<FJsonValueString>(Nested->GetName()));
+        }
+    }
+
     TSharedPtr<FJsonObject> ResultObj = MakeShared<FJsonObject>();
     ResultObj->SetArrayField(TEXT("event_graphs"), EventGraphNames);
     ResultObj->SetArrayField(TEXT("function_graphs"), FunctionGraphNames);
+    ResultObj->SetArrayField(TEXT("composite_graphs"), CompositeGraphNames);
     return ResultObj;
 }
 

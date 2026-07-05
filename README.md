@@ -155,12 +155,16 @@ This fork builds on the upstream [chongdashu/unreal-mcp](https://github.com/chon
 
 **C++ Plugin (`MCPGameProject/Plugins/UnrealMCP`)**
 - **Target any Blueprint graph, not just EventGraph** — added `FUnrealMCPCommonUtils::FindGraph()` so node/connection commands can target a named function graph (e.g. a custom function called `Enable`) instead of only the main event graph.
+- **Collapsed/composite ("folded") sub-graph support** — `FindGraph()` and `list_blueprint_graphs` now also search into collapsed/composite sub-graphs (`K2Node_Composite::BoundGraph`), nested arbitrarily deep, via a new `FUnrealMCPCommonUtils::GatherNestedGraphs()` helper.
 - **New commands**: `list_blueprint_graphs`, `add_blueprint_variable_get_node`, `add_blueprint_variable_set_node`, `break_blueprint_pin_links`, `delete_blueprint_node`.
+- **Material graph editing** — new `FUnrealMCPMaterialCommands` handler adds `create_material_expression`, `connect_material_expressions`, `connect_material_property`, `set_material_expression_property`, `set_material_property`, `compile_material`, so `UMaterialExpression` node graphs (e.g. custom render-target compositing materials) can be built/edited directly instead of by hand in the Material Editor.
+- **`SetObjectProperty` extended** to support `FName`, struct properties (`FLinearColor`, `FVector2D`, `FVector`), and object/asset reference properties — needed for the Material commands above, and usable by any existing property-setting command.
 - **Cross-component variable references** — `CreateVariableGetNode` / `CreateVariableSetNode` accept an optional `OwnerClass`, so a generated Get/Set node can reference a variable owned by another class (e.g. a sibling component) instead of only `self`.
 - **Fixed a TCP response truncation bug** in `MCPServerRunnable.cpp` — `FSocket::Send()` isn't guaranteed to send the whole buffer in one call, so large responses (e.g. a full node-graph dump) could get silently cut off. Sending now loops until all bytes are confirmed sent.
 
 **Python MCP Server (`Python/`)**
-- Added an optional `graph_name` parameter to the relevant blueprint node tools (`add_blueprint_function_node`, `connect_blueprint_nodes`, `add_blueprint_get_component_node`, `add_blueprint_self_reference`, etc.) so callers can target a specific function graph. Defaults to the main EventGraph when omitted, preserving existing behavior.
+- Added an optional `graph_name` parameter to the relevant blueprint node tools (`add_blueprint_function_node`, `connect_blueprint_nodes`, `add_blueprint_get_component_node`, `add_blueprint_self_reference`, etc.) so callers can target a specific function graph. Defaults to the main EventGraph when omitted, preserving existing behavior. `graph_name` also accepts a folded/composite sub-graph name.
+- New `tools/material_tools.py` registers the six Material graph tools listed above.
 
 **Compatibility**
 - Only verified against **Unreal Engine 5.5.4**. Other 5.5.x builds are likely fine but untested — see [Releases](../../releases) for the tested tag.

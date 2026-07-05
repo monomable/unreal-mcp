@@ -277,13 +277,15 @@ from tools.blueprint_tools import register_blueprint_tools
 from tools.node_tools import register_blueprint_node_tools
 from tools.project_tools import register_project_tools
 from tools.umg_tools import register_umg_tools
+from tools.material_tools import register_material_tools
 
 # Register tools
 register_editor_tools(mcp)
 register_blueprint_tools(mcp)
 register_blueprint_node_tools(mcp)
 register_project_tools(mcp)
-register_umg_tools(mcp)  
+register_umg_tools(mcp)
+register_material_tools(mcp)
 
 @mcp.prompt()
 def info():
@@ -342,6 +344,14 @@ def info():
     
     ## Project Tools
     - `create_input_mapping(action_name, key, input_type)` - Create input mappings
+
+    ## Material Tools
+    - `create_material_expression(material_path, expression_type, node_name, pos_x, pos_y, properties)` - Add a graph node
+    - `connect_material_expressions(material_path, from_node, to_node, from_output, to_input)` - Wire two nodes together
+    - `connect_material_property(material_path, from_node, property, from_output)` - Wire a node to a final output (EmissiveColor, Opacity, ...)
+    - `set_material_expression_property(material_path, node_name, property_name, value)` - Edit a node's property
+    - `set_material_property(material_path, property_name, value)` - Edit the Material asset itself (MaterialDomain, BlendMode, ...)
+    - `compile_material(material_path)` - Recompile and save after graph edits
     
     ## Best Practices
     
